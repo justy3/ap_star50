@@ -11,3 +11,24 @@ March rebalance
 https://english.sse.com.cn/markets/indices/indexnews/c/c_20250228_10773108.shtml
 Based on index methodology, Shanghai Stock Exchange and China Securities Index Co., Ltd. decided to adjust constituents of STAR 50 and other indices. All changes will be implemented as of the close of Mar 14, 2025. 3 constituents will be replaced for STAR 50. Please refer to the attachment for details.
 
+/* code for reading float data from yahoo finance files */
+info_l = []
+for tik in tickers:
+	tik_i = json.load(open(f"sse_info/{tik}.json", "r"))
+	shs_titak = tik_i.get("sharesOutstanding", 0)
+	shs_float = tik_i.get("floatShares", 0)
+	exch = tik_i["exchange"]
+	sector = tik_i.get("sector", "")
+
+	d = {
+		"ticker": tik,
+		"shs_os_yf": shs_titak,
+		"ff_shs_yf": shs_float,
+		"exchange": exch,
+		"sector": sector
+	}
+	info_l.append(d)
+
+# create dataframe from info_l
+info_df = pd.DataFrame(info_l)
+info_df['ticker'] = info_df['ticker'].astype(str)
