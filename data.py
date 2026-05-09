@@ -60,7 +60,7 @@ def load_historical_data_ohlcv(tickers, start_date=None, end_date=None):
 	return history
 
 def load_sse_holidays(year=None):
-	sse_holidays_t = pd.read_csv("sse_holidays.csv")
+	sse_holidays_t = pd.read_csv("data/sse_holidays.csv")
 	sse_holidays_t['date'] = pd.to_datetime(sse_holidays_t['date']).dt.date
 	sse_holidays = set(sse_holidays_t['date'].tolist())
 	
@@ -70,7 +70,7 @@ def load_sse_holidays(year=None):
 	return sse_holidays
 
 def load_star50_weights(query_date=None):
-	weights = pd.read_csv("star50_etf.csv")
+	weights = pd.read_csv("data/star50_etf.csv")
 	weights['ticker'] = weights['ticker'].astype(str)
 	weights['curr_weight'] = weights['weight']
 	return weights
@@ -115,7 +115,7 @@ def get_avg_vol_mcap(history, t_shs:pd.DataFrame|None=None, tickers=None, shs_co
 
 
 def load_star_board():
-	boa = pd.read_csv("sse.csv")
+	boa = pd.read_csv("data/sse.csv")
 	boa['ticker'] = boa['ticker'].astype(str)
 	boa['shares_total'] 	= np.round(boa['shares_total']/1e6)
 	boa['shares_tradable']	= np.round(boa['shares_tradable']/1e6)
