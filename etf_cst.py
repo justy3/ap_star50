@@ -96,7 +96,7 @@ def scrape_constituents_for_date_range(start_date, end_date):
 				df.to_csv(filename, index=False)
 
 			# sleep to avoid bombarding requests
-			time.sleep(1)
+			# time.sleep(1)
 	
 	return None
 
