@@ -42,21 +42,16 @@ def load_historical_data_ohlcv(tickers, start_date=None, end_date=None):
 	if isinstance(tickers, str):
 		tickers = [tickers]
 
-
-	# load historical data
 	history = pd.concat([load_ohlcv_one_ticker(f) for f in os.listdir("ohlcv") if f.endswith(".csv")])
 	history["date"] = pd.to_datetime(history["date"]).dt.date
 
-	# if start_date and end_date are provided, filter history
 	if start_date is not None:
-		history = history[(history["date"] <= end_date)]
+		history = history[history["date"] >= start_date]
 
 	if end_date is not None:
-		history = history[(history["date"] >= start_date)]
+		history = history[history["date"] <= end_date]
 
-	# reset index and sort by ticker and date
-	history = history.sort_values(["ticker", "date"])
-	history = history.reset_index(drop=True)
+	history = history.sort_values(["ticker", "date"]).reset_index(drop=True)
 	return history
 
 def load_sse_holidays(year=None):
@@ -75,41 +70,54 @@ def load_star50_weights(query_date=None):
 	weights['curr_weight'] = weights['weight']
 	return weights
 
+def load_star50_march_weights():
+	weights = pd.read_csv("data/star50_etf.csv")
+	weights['ticker'] = weights['ticker'].astype(str)
+	weights['curr_weight'] = weights['weight']
+	excls = ['688220', '688301', '688385']
+	incls = ['688213', '688278', '688578']
+
+	after_rebal_tickers = weights['ticker'].tolist()
+	after_rebal_tickers += excls
+	after_rebal_tickers = [x for x in after_rebal_tickers if x not in incls]
+	res_list = ["688608", "688425", "688361", "688568", "688172",]
+	return after_rebal_tickers
+
 def get_avg_vol_mcap(history, t_shs:pd.DataFrame|None=None, tickers=None, shs_col='shs_os_yf', start_date=None, end_date=None):
 	history = history.copy()
 	history['date'] = pd.to_datetime(history['date']).dt.date
 
 	if start_date is not None:
-		history = history[(history["date"] <= end_date)]
+		history = history[history["date"] >= start_date]
 
 	if end_date is not None:
-		history = history[(history["date"] >= start_date)]
+		history = history[history["date"] <= end_date]
 
-	if len(t_shs) > 0 and not(shs_col in history.columns):
+	# merge share count into history if not already present
+	if len(t_shs) > 0 and shs_col not in history.columns:
 		history = pd.merge(history, t_shs[['ticker', shs_col]], on='ticker', how='left')
-		history['total_mcap'] = history['close'] * history[shs_col]
-	
-	if not shs_col in history.columns:
-		qt.log.error(f"shares outstanding column '{shs_col}' not found in history dataframe and t_shs is empty or None")
+
+	if shs_col not in history.columns:
+		qt.log.error(f"shares column '{shs_col}' not found in history and t_shs is empty or None")
 		sys.exit(1)
 
-	# calculate daily total market cap and daily value traded
-	history['total_mcap'] = (history['close'] * history[shs_col])/1e3
-	history['val_traded'] = (history['close'] * history['volume'])/1e6
+	# total_mcap [B CNY] = close [CNY] × shares_total [M shares] / 1e3
+	# val_traded [M CNY] = close [CNY] × volume [shares] / 1e6
+	history['total_mcap'] = (history['close'] * history[shs_col]) / 1e3
+	history['val_traded'] = (history['close'] * history['volume']) / 1e6
 
-	# if tickers is provided, filter history by tickers
 	if tickers is not None:
 		history = history[history['ticker'].isin(tickers)]
 
-	# avg total market cap and avg value traded for each ticker
-	avg_tmcap = history.groupby('ticker').agg({
-		'total_mcap': 'mean',
-		'val_traded': 'mean',
-		'date': 'count'
-	}).reset_index().sort_values('total_mcap', ascending=False).reset_index(drop=True)
-	
-	# rename columns
-	avg_tmcap.columns = ['ticker', 'avg_total_mcap', 'avg_val_traded', 'count_data_pts']
+	avg_tmcap = (
+		history.groupby('ticker')
+		.agg(avg_total_mcap=('total_mcap', 'mean'),
+		     avg_val_traded=('val_traded', 'mean'),
+		     count_data_pts=('date', 'count'))
+		.reset_index()
+		.sort_values('avg_total_mcap', ascending=False)
+		.reset_index(drop=True)
+	)
 
 	return avg_tmcap
 
@@ -130,3 +138,16 @@ def get_listing_dates(tickers):
 	t_ld = pd.DataFrame(history.groupby('ticker')['date'].min()).reset_index()
 	t_ld.columns = ['ticker', 'listing_date']
 	return t_ld
+
+def get_months_from_cutoff(d, cutoff):
+	months = (cutoff.year - d.year) * 12 + (cutoff.month - d.month)
+	
+	if cutoff.day < d.day:
+		_, last_day_of_cutoff_month = calendar.monthrange(cutoff.year, cutoff.month)
+		
+		if cutoff.day != last_day_of_cutoff_month:
+			months -= 1
+		elif d.day < last_day_of_cutoff_month:
+			pass 
+
+	return max(0, months)

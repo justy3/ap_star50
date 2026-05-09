@@ -32,3 +32,21 @@ for tik in tickers:
 # create dataframe from info_l
 info_df = pd.DataFrame(info_l)
 info_df['ticker'] = info_df['ticker'].astype(str)
+
+
+# wrong data for total market cap
+688235
+245.85 B CNY - https://www.tradingview.com/symbols/SSE-688235/?utm_source=chatgpt.com
+264.5  B CNY - google stocks
+380		B CNY - https://english.sse.com.cn/markets/equities/list/quotation/?COMPANY_CODE=688235&STOCK_CODE=688235
+333.9 B CNY - https://finance.yahoo.com/quote/688235.SS/
+28 B CNY (tradable market cap) - https://english.sse.com.cn/markets/equities/list/quotation/?COMPANY_CODE=688235&STOCK_CODE=688235
+
+| Exchange                            | Security            | Ticker | Share Type                 |                              Approx. Shares Listed / Outstanding |                   Approx. Market Cap of Listing | Notes                                |
+| ----------------------------------- | ------------------- | ------ | -------------------------- | ---------------------------------------------------------------: | ----------------------------------------------: | ------------------------------------ |
+| NASDAQ                              | ADSs                | ONC    | American Depositary Shares |                      ~110.9M ADSs outstanding ([Stock Titan][1]) |                ~$33B–36B USD ([Stock Titan][1]) | Main global liquidity venue          |
+| Hong Kong Stock Exchange            | Ordinary Shares     | 06160  | Ordinary shares            |                       Same underlying ordinary shares of company |       ~HKD 289B (~USD 37B) ([Yahoo Finance][2]) | Fungible with global ordinary shares |
+| Shanghai Stock Exchange STAR Market | RMB Ordinary Shares | 688235 | China A-shares             | ~115M–120M A-shares (STAR tranche from IPO + subsequent changes) | ~RMB 28B–30B (~USD 4B) using current STAR price | China domestic investor listing      |
+
+[1]: https://www.stocktitan.net/overview/ONC/?utm_source=chatgpt.com "ONC Stock Price, News & Analysis | BeOne Medicines"
+[2]: https://sg.finance.yahoo.com/quote/6160.HK/?utm_source=chatgpt.com "BeOne Medicines AG (6160.HK) stock price, news, quote ..."
