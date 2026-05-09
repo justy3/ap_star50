@@ -8,6 +8,7 @@ import calendar
 import requests
 import akshare as ak
 import yfinance as yf
+import streamlit as st
 
 
 from qt import dt, np, pd
