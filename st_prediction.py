@@ -19,6 +19,12 @@ REVIEW_PARAMS = {
 		"cutoff_date": dt.date(2026, 1, 31),
 		"hist_start": dt.date(2025, 2, 1),
 	},
+	"Dec 2025": {
+		"eff_date": dt.date(2025, 12, 12),
+		"annc_date": dt.date(2025, 11, 28),
+		"cutoff_date": dt.date(2025, 10, 30),
+		"hist_start": dt.date(2024, 11, 1),
+	}
 }
 
 SHS_COL_MAP = {
@@ -57,6 +63,10 @@ def cached_star50_weights():
 @st.cache_data(show_spinner=False)
 def cached_star50_march():
 	return load_star50_march_weights()
+
+@st.cache_data(show_spinner=False)
+def cached_star50_dec25():
+	return load_star50_dec25_tickers()
 
 
 # ------------------------------- sidebar inputs -------------------------------
@@ -130,11 +140,15 @@ univ['vtrad_rank'] = univ['avg_val_traded'].rank(ascending=False, method='min')
 if eff_date.month == 6:
 	curr_s50 = cached_star50_weights()
 	univ = pd.merge(univ, curr_s50[['ticker', 'curr_weight']], on='ticker', how='left')
-else:
+elif eff_date.month == 3:
 	curr_s50 = cached_star50_march()
 	univ['curr_weight'] = univ['ticker'].isin(curr_s50).astype(float)
 	univ.loc[univ['curr_weight'] == 0, 'curr_weight'] = np.nan
-
+elif eff_date.month == 12:
+	# for Dec review, use current weights as of March review (since we won't have the June review data yet)
+	curr_s50 = cached_star50_dec25()
+	univ['curr_weight'] = univ['ticker'].isin(curr_s50).astype(float)
+	univ.loc[univ['curr_weight'] == 0, 'curr_weight'] = np.nan
 
 # --------------------------------- eligibility --------------------------------
 no_ge_12 = len(univ[univ['month_to_cof'] >= 12])

@@ -83,6 +83,16 @@ def load_star50_march_weights():
 	res_list = ["688608", "688425", "688361", "688568", "688172",]
 	return after_rebal_tickers
 
+def load_star50_dec25_tickers():
+	after_rebal_tickers = load_star50_march_weights()
+	incls = ['688220', '688702']
+	excls = ['688363', '688563']
+	after_rebal_tickers += excls
+	after_rebal_tickers = [x for x in after_rebal_tickers if x not in incls]
+	res_list = []
+	return after_rebal_tickers
+
+
 def get_avg_vol_mcap(history, t_shs:pd.DataFrame|None=None, tickers=None, shs_col='shs_os_yf', start_date=None, end_date=None):
 	history = history.copy()
 	history['date'] = pd.to_datetime(history['date']).dt.date
