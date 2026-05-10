@@ -1,6 +1,6 @@
 from _lib import *
 from data import *
-from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, JsCode, ColumnsAutoSizeMode
+from st_fmt import show_grid, grid_height
 
 
 st.set_page_config(page_title="STAR50 Rebalance Prediction", layout="wide")
@@ -26,70 +26,6 @@ SHS_COL_MAP = {
 	"shares_total_sse": "shares_total",
 	"shs_os_yf": "shs_os_yf",
 }
-
-
-NUM_FMT = JsCode("""
-function(params) {
-	if (params.value === null || params.value === undefined || Number.isNaN(params.value)) return '';
-	if (typeof params.value !== 'number') return params.value;
-	return params.value.toLocaleString(undefined, {maximumFractionDigits: 2});
-}
-""")
-
-
-def _prep_df_for_grid(df):
-	"""AgGrid is finicky about non-JSON-serialisable cells (dates, NaN in
-	object cols, etc.). Convert dates to strings and replace NaN in object
-	columns with empty strings so the grid renders cleanly."""
-	out = df.copy().reset_index(drop=True)
-	for c in out.columns:
-		s = out[c]
-		if pd.api.types.is_datetime64_any_dtype(s):
-			out[c] = s.dt.strftime("%Y-%m-%d")
-		elif s.dtype == object:
-			# date objects → iso string; leave the rest, fill NaN with ''
-			def _coerce(v):
-				if v is None:
-					return ""
-				if isinstance(v, (dt.date, dt.datetime)):
-					return v.strftime("%Y-%m-%d")
-				try:
-					if pd.isna(v):
-						return ""
-				except (TypeError, ValueError):
-					pass
-				return v
-			out[c] = s.map(_coerce)
-	return out
-
-
-def show_grid(df, key, height=400, fit_columns=False):
-	df = _prep_df_for_grid(df)
-	gb = GridOptionsBuilder.from_dataframe(df)
-	gb.configure_default_column(
-		filter=True, sortable=True, resizable=True, floatingFilter=True,
-		minWidth=110,
-	)
-	gb.configure_grid_options(domLayout='normal', enableCellTextSelection=True)
-	for col in df.select_dtypes(include=[np.number]).columns:
-		gb.configure_column(
-			col,
-			type=["numericColumn", "numberColumnFilter"],
-			valueFormatter=NUM_FMT,
-		)
-	autosize = ColumnsAutoSizeMode.FIT_CONTENTS if not fit_columns else ColumnsAutoSizeMode.FIT_ALL_COLUMNS_TO_VIEW
-	AgGrid(
-		df,
-		gridOptions=gb.build(),
-		height=height,
-		update_mode=GridUpdateMode.NO_UPDATE,
-		columns_auto_size_mode=autosize,
-		key=key,
-		allow_unsafe_jscode=True,
-		theme="streamlit",
-		enable_enterprise_modules=False,
-		reload_data=False,
-	)
 
 
 @st.cache_data(show_spinner=False)
@@ -202,7 +138,7 @@ else:
 
 # --------------------------------- eligibility --------------------------------
 no_ge_12 = len(univ[univ['month_to_cof'] >= 12])
-listing_month_cutoff = 12 if no_ge_12 > 100 else 6
+listing_month_cutoff = 12 if 150 >= no_ge_12 >= 100 else 6
 
 univ['listing_elig'] = (
 	((univ['tmcap_rank'] <= 3) & (univ['month_to_cof'] >= 1)) |
@@ -260,20 +196,120 @@ univ_kept.loc[univ_kept['curr_weight'].fillna(0) != 0, 'dist_to_60'] = (
 
 
 # --------------------------- inclusions / exclusions --------------------------
-comp_incl = univ_kept[(univ_kept['tmcap_rank2'] <= 40) & (univ_kept['curr_weight'].isna())].copy()
-comp_excl = univ_kept[(univ_kept['tmcap_rank2'] >  60) & (univ_kept['curr_weight'].notna())].copy()
+# Use univ_full so that ST and listing-ineligible names (which still carry
+# curr_weight from the merge) can show up as compulsory exclusions.
+comp_incl = univ_full[
+	(univ_full['tmcap_rank2'] <= 40) & (univ_full['curr_weight'].isna())
+].copy()
 
-st.subheader(f"Predicted inclusions  ({len(comp_incl)})")
-st.caption("Stocks NOT in current index with avg total mcap rank ≤ 40")
-if len(comp_incl):
-	show_grid(comp_incl, key="incl", height=min(80 + 30 * len(comp_incl), 400))
-else:
-	st.write("_none_")
+comp_excl = pd.concat([
+	univ_full[
+		univ_full['curr_weight'].notna() &
+		(univ_full['st'] | (~univ_full['listing_elig']))
+	],
+	univ_full[
+		univ_full['curr_weight'].notna() &
+		(univ_full['tmcap_rank2'] > 60)
+	],
+]).drop_duplicates(subset=['ticker']).reset_index(drop=True)
 
-st.subheader(f"Predicted exclusions  ({len(comp_excl)})")
-st.caption("Stocks IN current index with avg total mcap rank > 60")
-if len(comp_excl):
-	show_grid(comp_excl, key="excl", height=min(80 + 30 * len(comp_excl), 400))
+# extra inclusions / exclusions to balance the count
+xtra_excl = pd.DataFrame(columns=univ_full.columns)
+xtra_incl = pd.DataFrame(columns=univ_full.columns)
+
+if len(comp_incl) > len(comp_excl):
+	# need extra exclusions: pick worst-ranked current-index names not already excluded
+	xtra_excl = univ_full[
+		univ_full['curr_weight'].notna() &
+		(~univ_full['ticker'].isin(comp_excl['ticker']))
+	].iloc[-(len(comp_incl) - len(comp_excl)):]
+elif len(comp_incl) < len(comp_excl):
+	# need extra inclusions: pick best-ranked non-index names not already included
+	xtra_incl = univ_full[
+		univ_full['curr_weight'].isna() &
+		(~univ_full['ticker'].isin(comp_incl['ticker']))
+	].iloc[: len(comp_excl) - len(comp_incl)]
+
+incl = pd.concat([comp_incl, xtra_incl], ignore_index=True)
+excl = pd.concat([comp_excl, xtra_excl], ignore_index=True)
+
+new_constituents = univ_full[
+	univ_full['ticker'].isin(incl['ticker']) |
+	(univ_full['curr_weight'].notna() & univ_full['ticker'].isin(excl['ticker']))
+].sort_values('tmcap_rank2').reset_index(drop=True)
+
+
+# ---- header summary
+sc1, sc2, sc3, sc4, sc5, sc6 = st.columns(6)
+sc1.metric("Compulsory inclusions", len(comp_incl))
+sc2.metric("Compulsory exclusions", len(comp_excl))
+sc3.metric("Extra inclusions",     len(xtra_incl))
+sc4.metric("Extra exclusions",     len(xtra_excl))
+sc5.metric("Final inclusions",     len(incl))
+sc6.metric("Final exclusions",     len(excl))
+
+
+def _side_by_side(left_df, left_label, left_caption, left_key,
+                  right_df, right_label, right_caption, right_key):
+	lc, rc = st.columns(2)
+	with lc:
+		st.markdown(f"**{left_label} ({len(left_df)})**")
+		st.caption(left_caption)
+		if len(left_df):
+			show_grid(left_df, key=left_key, height=grid_height(len(left_df)))
+		else:
+			st.write("_none_")
+	with rc:
+		st.markdown(f"**{right_label} ({len(right_df)})**")
+		st.caption(right_caption)
+		if len(right_df):
+			show_grid(right_df, key=right_key, height=grid_height(len(right_df)))
+		else:
+			st.write("_none_")
+
+
+st.markdown("### Inclusions / exclusions")
+ie_tabs = st.tabs([
+	f"Final ({len(incl)} / {len(excl)})",
+	f"Compulsory ({len(comp_incl)} / {len(comp_excl)})",
+	f"Extra ({len(xtra_incl)} / {len(xtra_excl)})",
+])
+
+with ie_tabs[0]:
+	_side_by_side(
+		incl, "Final inclusions",
+		"Compulsory + extra inclusions",
+		"final_incl",
+		excl, "Final exclusions",
+		"Compulsory + extra exclusions",
+		"final_excl",
+	)
+
+with ie_tabs[1]:
+	_side_by_side(
+		comp_incl, "Compulsory inclusions",
+		"Not in index AND tmcap_rank2 ≤ 40",
+		"comp_incl",
+		comp_excl, "Compulsory exclusions",
+		"In index AND (ST/ineligible OR tmcap_rank2 > 60)",
+		"comp_excl",
+	)
+
+with ie_tabs[2]:
+	_side_by_side(
+		xtra_incl, "Extra inclusions",
+		"Best-ranked non-index names added when comp_excl > comp_incl",
+		"xtra_incl",
+		xtra_excl, "Extra exclusions",
+		"Worst-ranked current-index names added when comp_incl > comp_excl",
+		"xtra_excl",
+	)
+
+
+st.markdown(f"### New constituents ({len(new_constituents)})")
+st.caption("All names changing in this rebalance (final inclusions + final exclusions), sorted by tmcap_rank2")
+if len(new_constituents):
+	show_grid(new_constituents, key="new_const", height=grid_height(len(new_constituents), cap=500))
 else:
 	st.write("_none_")
 
