@@ -235,7 +235,10 @@ excl = pd.concat([comp_excl, xtra_excl], ignore_index=True)
 
 new_constituents = univ_full[
 	univ_full['ticker'].isin(incl['ticker']) |
-	(univ_full['curr_weight'].notna() & univ_full['ticker'].isin(excl['ticker']))
+	(
+		univ_full['curr_weight'].notna() & 
+		(~univ_full['ticker'].isin(excl['ticker']))
+	)
 ].sort_values('tmcap_rank2').reset_index(drop=True)
 
 
@@ -249,61 +252,43 @@ sc5.metric("Final inclusions",     len(incl))
 sc6.metric("Final exclusions",     len(excl))
 
 
-def _side_by_side(left_df, left_label, left_caption, left_key,
-                  right_df, right_label, right_caption, right_key):
-	lc, rc = st.columns(2)
-	with lc:
-		st.markdown(f"**{left_label} ({len(left_df)})**")
-		st.caption(left_caption)
-		if len(left_df):
-			show_grid(left_df, key=left_key, height=grid_height(len(left_df)))
-		else:
-			st.write("_none_")
-	with rc:
-		st.markdown(f"**{right_label} ({len(right_df)})**")
-		st.caption(right_caption)
-		if len(right_df):
-			show_grid(right_df, key=right_key, height=grid_height(len(right_df)))
-		else:
-			st.write("_none_")
+def _grid_or_none(df, key, caption=None):
+	if caption:
+		st.caption(caption)
+	if len(df):
+		show_grid(df, key=key, height=grid_height(len(df)))
+	else:
+		st.write("_none_")
 
 
-st.markdown("### Inclusions / exclusions")
-ie_tabs = st.tabs([
-	f"Final ({len(incl)} / {len(excl)})",
-	f"Compulsory ({len(comp_incl)} / {len(comp_excl)})",
-	f"Extra ({len(xtra_incl)} / {len(xtra_excl)})",
+# ---- INCLUSIONS --------------------------------------------------------------
+st.markdown("## Inclusions")
+incl_tabs = st.tabs([
+	f"Final ({len(incl)})",
+	f"Compulsory ({len(comp_incl)})",
+	f"Extra ({len(xtra_incl)})",
 ])
+with incl_tabs[0]:
+	_grid_or_none(incl, "final_incl", "Compulsory + extra inclusions")
+with incl_tabs[1]:
+	_grid_or_none(comp_incl, "comp_incl", "Not in index AND tmcap_rank2 ≤ 40")
+with incl_tabs[2]:
+	_grid_or_none(xtra_incl, "xtra_incl", "Best-ranked non-index names added when comp_excl > comp_incl")
 
-with ie_tabs[0]:
-	_side_by_side(
-		incl, "Final inclusions",
-		"Compulsory + extra inclusions",
-		"final_incl",
-		excl, "Final exclusions",
-		"Compulsory + extra exclusions",
-		"final_excl",
-	)
 
-with ie_tabs[1]:
-	_side_by_side(
-		comp_incl, "Compulsory inclusions",
-		"Not in index AND tmcap_rank2 ≤ 40",
-		"comp_incl",
-		comp_excl, "Compulsory exclusions",
-		"In index AND (ST/ineligible OR tmcap_rank2 > 60)",
-		"comp_excl",
-	)
-
-with ie_tabs[2]:
-	_side_by_side(
-		xtra_incl, "Extra inclusions",
-		"Best-ranked non-index names added when comp_excl > comp_incl",
-		"xtra_incl",
-		xtra_excl, "Extra exclusions",
-		"Worst-ranked current-index names added when comp_incl > comp_excl",
-		"xtra_excl",
-	)
+# ---- EXCLUSIONS --------------------------------------------------------------
+st.markdown("## Exclusions")
+excl_tabs = st.tabs([
+	f"Final ({len(excl)})",
+	f"Compulsory ({len(comp_excl)})",
+	f"Extra ({len(xtra_excl)})",
+])
+with excl_tabs[0]:
+	_grid_or_none(excl, "final_excl", "Compulsory + extra exclusions")
+with excl_tabs[1]:
+	_grid_or_none(comp_excl, "comp_excl", "In index AND (ST/ineligible OR tmcap_rank2 > 60)")
+with excl_tabs[2]:
+	_grid_or_none(xtra_excl, "xtra_excl", "Worst-ranked current-index names added when comp_incl > comp_excl")
 
 
 st.markdown(f"### New constituents ({len(new_constituents)})")
